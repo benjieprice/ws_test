@@ -1,0 +1,156 @@
+<html>
+<head>
+	<link rel="stylesheet" type="text/css" href="style.css">
+	<script src="./app.js"></script>
+</head>
+<body>
+	<canvas id="draw" width="900" height="600"></canvas>
+	
+<script>
+	
+	var userPaintings = {}
+	var username = localStorage.getItem('username')
+	var currentPainting = ''
+	var color = ''
+	function handshake(data){
+		if (webSocket.readyState != WebSocket.OPEN) {
+        	console.error("webSocket is not open: " + webSocket.readyState);
+        	return;
+    	}
+    	webSocket.send('handshake:' + username + (color ? (':' + color) : ''));
+	}
+	function refresh(data){
+		updateCanvas(data,canvas)
+		console.log(data)
+	}
+
+	function setUsername(){
+		username = localStorage.getItem('username')
+		if(!username){
+			username = prompt('select a username:')
+			if(!!username){
+				localStorage.setItem("username", username)
+				setColor()
+			}else{
+				setUsername()
+			}
+		}
+	}
+
+	function setColor(){
+			color = prompt('select a color:')
+			if(!color){
+				setColor()
+			}
+	}
+
+	window.addEventListener("load", function(){
+		setUsername()
+		openWsConnection(handshake, refresh)
+	});
+
+	let colors = {}
+	let width = ['']
+	const canvas = document.querySelector('#draw');
+	const context = canvas.getContext('2d');
+	canvas.width = window.innerWidth
+	canvas.height = window.innerHeight
+
+	context.strokeStyle = color
+
+	context.lineJoin ='round';
+	context.lineCap ='round';
+	context.lineWidth = 8
+
+	let isDrawing = false;
+	var lastX = 0;
+	var lastY = 0;
+
+	function updateCanvas(response,canvas){
+		if(response.startsWith('handshake')){
+			try{
+				allPaintings = JSON.parse(response.substr(11 ,response.lenght))
+
+				Object.keys(allPaintings).forEach(function(key){
+					item = allPaintings[key]
+					color = item.color
+					context.strokeStyle = color
+					paths = item.paint.split(";")
+					paths.forEach(function(path){
+						path.split("-").forEach(function(coordinate){
+							[x,y] = coordinate.split(',')
+							if(x && y){
+								if(!isDrawing){
+									lastX = x
+									lastY = y
+								}
+								isDrawing = true
+								draw(Number(x),Number(y))
+							}
+							console.log('x:' + x + '- y:' + y)	
+						})
+						isDrawing = false
+					})
+				})
+			}catch(err){
+				console.error(err)
+			}
+		}
+	}
+
+	function sendData(){
+		if (webSocket.readyState != WebSocket.OPEN) {
+        	console.error("webSocket is not open: " + webSocket.readyState);
+        	return;
+    	}
+    	let message = username + ':' + currentPainting.substring(0, currentPainting.length-1)
+    	console.log(message)
+    	webSocket.send(message);
+    	currentPainting = ''
+	}
+
+
+	function draw(newX,newY){
+		if(!isDrawing)
+			return;
+
+		context.beginPath();
+		context.moveTo(lastX, lastY);
+		context.lineTo(newX,newY);
+		context.stroke();
+		lastX = newX
+		lastY = newY
+		currentPainting += lastX + ',' + lastY + '-'
+	}
+
+	function dr(e){
+		if(!isDrawing)
+			return;
+
+		context.beginPath();
+		context.moveTo(lastX, lastY);
+		context.lineTo(e.offsetX,e.offsetY);
+		context.stroke();
+		lastX = e.offsetX
+		lastY = e.offsetY
+		currentPainting += lastX + ',' + lastY + '-'
+	}
+
+	canvas.addEventListener('mousedown', (e)=> {
+		isDrawing = true
+		lastX = e.offsetX
+		lastY = e.offsetY
+
+	})
+	canvas.addEventListener('mousemove', (e) => draw(e.offsetX,e.offsetY))
+	
+	canvas.addEventListener('mouseup', (e)=> {
+		sendData()
+		isDrawing = false
+	})
+	canvas.addEventListener('mouseout', (e)=> isDrawing = false)
+
+</script>
+</body>
+
+</html>
